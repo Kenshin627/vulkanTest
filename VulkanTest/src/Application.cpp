@@ -1,4 +1,5 @@
 #include <vector>
+#include <set>
 #include <iostream>
 
 #include "Application.h"
@@ -30,6 +31,8 @@ void Application::MainLoop()
 
 void Application::Cleanup()
 {
+	vkDestroyDevice(m_LogicDevice, nullptr);
+	vkDestroySurfaceKHR(m_Vkinstance, m_Surface, nullptr);
 	vkDestroyInstance(m_Vkinstance, nullptr);
 	glfwDestroyWindow(m_Window);
 	glfwTerminate();
@@ -38,6 +41,9 @@ void Application::Cleanup()
 void Application::InitVulkan()
 {
 	CreateInstance();
+	CreateSurface();
+	PickPhysicalDevice();
+	CreateLogicDevice();
 }
 
 void Application::CreateInstance()
@@ -83,10 +89,10 @@ void Application::PickPhysicalDevice()
 	{
 		if (IsDeviceSuitable(device))
 		{
-			m_Device = device;
+			m_PhyiscalDevice = device;
 		}
 	}
-	if (m_Device == VK_NULL_HANDLE)
+	if (m_PhyiscalDevice == VK_NULL_HANDLE)
 	{
 		throw std::runtime_error("can not found stuitable device!");
 	}
@@ -98,5 +104,82 @@ bool Application::IsDeviceSuitable(const VkPhysicalDevice& device)
 	VkPhysicalDeviceFeatures features{};
 	vkGetPhysicalDeviceProperties(device, &properts);
 	vkGetPhysicalDeviceFeatures(device, &features);
-	return properts.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && features.geometryShader;
+
+	QueueFamilyIndices indices = FindQueueFamilies(device);
+	return  indices.IsComplete() && properts.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && features.geometryShader;
+}
+
+Application::QueueFamilyIndices Application::FindQueueFamilies(const VkPhysicalDevice& device)
+{
+	QueueFamilyIndices indices;
+	uint32_t queueCount = 0;	
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueCount, nullptr);
+	std::vector<VkQueueFamilyProperties> properties(queueCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueCount, properties.data());
+	int i = 0;
+	VkBool32 presentSupport = false;
+	for (auto& property : properties)
+	{
+		if (indices.IsComplete())
+		{
+			break;
+		}
+		if (property.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+		{
+			indices.GraphicFamily = i;
+		}
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_Surface, &presentSupport);
+		if (presentSupport)
+		{
+			indices.PresentFamily = i;
+		}
+		i++;
+	}
+	return indices;
+}
+
+void Application::CreateLogicDevice()
+{
+	float queuePriority = 1.0f;
+	QueueFamilyIndices indices = FindQueueFamilies(m_PhyiscalDevice);
+	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+	std::set<uint32_t> uniqueQueueFamilies = { indices.GraphicFamily.value(), indices.PresentFamily.value() };
+	for (auto& queueIndex : uniqueQueueFamilies)
+	{
+		VkDeviceQueueCreateInfo queueCreateInfo{};
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex = queueIndex;
+		queueCreateInfo.queueCount = 1;
+		queueCreateInfo.pQueuePriorities = &queuePriority;
+		queueCreateInfos.push_back(queueCreateInfo);
+	}
+
+	VkPhysicalDeviceFeatures deviceFeatures{};
+
+	VkDeviceCreateInfo createInfo{};
+	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	createInfo.queueCreateInfoCount = uniqueQueueFamilies.size();
+	createInfo.pQueueCreateInfos = queueCreateInfos.data();
+	createInfo.pEnabledFeatures = &deviceFeatures;
+
+	//validation layers
+	createInfo.enabledLayerCount = 0;
+
+	if (vkCreateDevice(m_PhyiscalDevice, &createInfo, nullptr, &m_LogicDevice))
+	{
+		throw std::runtime_error("failed to create logical device!");
+	}
+	vkGetDeviceQueue(m_LogicDevice, indices.PresentFamily.value(), 0, &m_PresentQueue);
+}
+
+void Application::CreateSurface()
+{
+	VkWin32SurfaceCreateInfoKHR createInfo{};
+	createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+	createInfo.hwnd = glfwGetWin32Window(m_Window);
+	createInfo.hinstance = GetModuleHandle(nullptr);
+	if (vkCreateWin32SurfaceKHR(m_Vkinstance, &createInfo, nullptr, &m_Surface))
+	{
+		throw std::runtime_error("failed to create window surface!");
+	}
 }
