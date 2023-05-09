@@ -17,7 +17,10 @@ public:
 	void Cleanup();
 private:
 	void CreateInstance();
+	void PickPhysicalDevice();
+	bool IsDeviceSuitable(const VkPhysicalDevice& device);
 private:
 	GLFWwindow* m_Window;
 	VkInstance m_Vkinstance;
+	VkPhysicalDevice m_Device = VK_NULL_HANDLE;
 };

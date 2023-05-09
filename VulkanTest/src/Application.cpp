@@ -1,4 +1,4 @@
-
+#include <vector>
 #include <iostream>
 
 #include "Application.h"
@@ -65,4 +65,38 @@ void Application::CreateInstance()
 	{
 		throw std::runtime_error("failed to create instance!");
 	}
+}
+
+void Application::PickPhysicalDevice()
+{
+	uint32_t phisicalDeviceCount = 0;
+	vkEnumeratePhysicalDevices(m_Vkinstance, &phisicalDeviceCount, nullptr);
+	if (phisicalDeviceCount == 0)
+	{
+		throw std::runtime_error("can not found device!");
+	}
+
+	std::vector<VkPhysicalDevice> phsicalDevices(phisicalDeviceCount);
+	vkEnumeratePhysicalDevices(m_Vkinstance, &phisicalDeviceCount, phsicalDevices.data());
+
+	for (auto& device : phsicalDevices)
+	{
+		if (IsDeviceSuitable(device))
+		{
+			m_Device = device;
+		}
+	}
+	if (m_Device == VK_NULL_HANDLE)
+	{
+		throw std::runtime_error("can not found stuitable device!");
+	}
+}
+
+bool Application::IsDeviceSuitable(const VkPhysicalDevice& device)
+{
+	VkPhysicalDeviceProperties properts{};
+	VkPhysicalDeviceFeatures features{};
+	vkGetPhysicalDeviceProperties(device, &properts);
+	vkGetPhysicalDeviceFeatures(device, &features);
+	return properts.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && features.geometryShader;
 }
