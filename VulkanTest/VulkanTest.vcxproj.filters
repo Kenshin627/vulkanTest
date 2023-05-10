@@ -26,5 +26,12 @@
     <ClInclude Include="src\Application.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="utils\readFile.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="resource\shaders\vertex.glsl" />
+    <None Include="resource\shaders\fragment.glsl" />
   </ItemGroup>
 </Project>

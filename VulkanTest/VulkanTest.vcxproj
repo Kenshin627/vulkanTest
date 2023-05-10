@@ -153,6 +153,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Application.h" />
+    <ClInclude Include="utils\readFile.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="resource\shaders\fragment.glsl" />
+    <None Include="resource\shaders\vertex.glsl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
