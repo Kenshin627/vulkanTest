@@ -59,6 +59,9 @@ private:
 	void CreateFrameBuffer();
 	void CreateCommandPool();
 	void CreateCommandBuffer();
+	void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+	void CreateSyncObjects();
+	void DrawFrame();
 
 private:
 	GLFWwindow* m_Window;
@@ -67,6 +70,7 @@ private:
 	VkDevice m_LogicDevice = VK_NULL_HANDLE;
 	VkSurfaceKHR m_Surface;
 	VkQueue m_PresentQueue;
+	VkQueue m_GraphicQueue;
 	VkSwapchainKHR m_SwapChain;
 	std::vector<VkImage> m_SwapChainImages;
 	VkFormat m_SwapChainFormat;
@@ -79,4 +83,7 @@ private:
 	std::vector<VkFramebuffer> m_FrameBuffers;
 	VkCommandPool m_CommandPool;
 	VkCommandBuffer m_CommandBuffer;
+	VkSemaphore m_ImageAvailableSemaphore;
+	VkSemaphore m_RenderFinishedSemaphore;
+	VkFence m_InFlightFence;
 };
