@@ -52,6 +52,8 @@ void Application::Cleanup()
 		vkDestroyImageView(m_LogicDevice, imageView, nullptr);
 	}
 	vkDestroySwapchainKHR(m_LogicDevice, m_SwapChain, nullptr);
+	vkDestroyBuffer(m_LogicDevice, m_VertexBuffer, nullptr);
+	vkFreeMemory(m_LogicDevice, m_BufferMemory, nullptr);
 	vkDestroyDevice(m_LogicDevice, nullptr);
 	vkDestroySurfaceKHR(m_Vkinstance, m_Surface, nullptr);
 	vkDestroyInstance(m_Vkinstance, nullptr);
@@ -71,6 +73,7 @@ void Application::InitVulkan()
 	CreateGraphicsPipeline();
 	CreateFrameBuffer();
 	CreateCommandPool();
+	CreateVertexBuffer();
 	CreateCommandBuffer();
 	CreateSyncObjects();
 }
@@ -419,8 +422,12 @@ void Application::CreateGraphicsPipeline()
 
 	VkPipelineVertexInputStateCreateInfo vertexinputInfo{};
 	vertexinputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexinputInfo.vertexBindingDescriptionCount = 0;
-	vertexinputInfo.vertexAttributeDescriptionCount = 0;
+	auto vertexBinding = Vertex::GetBindingDescription();
+	auto vertexAttributes = Vertex::GetAttribuDescription();
+	vertexinputInfo.vertexBindingDescriptionCount = 1;
+	vertexinputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexAttributes.size());
+	vertexinputInfo.pVertexBindingDescriptions = &vertexBinding;
+	vertexinputInfo.pVertexAttributeDescriptions = vertexAttributes.data();
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -657,6 +664,10 @@ void Application::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 			scissor.offset = { 0, 0 };
 			scissor.extent = m_SwapChainExtent;
 			vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+			VkBuffer vertexBuffers[] = { m_VertexBuffer };
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 			vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 		vkCmdEndRenderPass(commandBuffer);
 	if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -720,3 +731,49 @@ void Application::DrawFrame()
 	presentInfo.pResults = nullptr;
 	vkQueuePresentKHR(m_PresentQueue, &presentInfo);
 }
+
+void Application::CreateVertexBuffer()
+{
+	VkBufferCreateInfo createInfo{};
+	createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	createInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	createInfo.size = sizeof(m_Vertices[0]) * m_Vertices.size();
+	createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	if (vkCreateBuffer(m_LogicDevice, &createInfo, nullptr, &m_VertexBuffer) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create vertex buffer!");
+	}
+	VkMemoryRequirements requirments;
+	vkGetBufferMemoryRequirements(m_LogicDevice, m_VertexBuffer, &requirments);
+
+	VkMemoryAllocateInfo allocateInfo{};
+	allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	allocateInfo.allocationSize = requirments.size;
+	allocateInfo.memoryTypeIndex = FindMemoryType(requirments.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	if (vkAllocateMemory(m_LogicDevice, &allocateInfo, nullptr, &m_BufferMemory) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to allocate vertex buffer memory!");
+	}
+
+	vkBindBufferMemory(m_LogicDevice, m_VertexBuffer, m_BufferMemory, 0);
+	void* data;
+	vkMapMemory(m_LogicDevice, m_BufferMemory, 0, createInfo.size, 0, &data);
+	memcpy(data, m_Vertices.data(), (size_t)createInfo.size);
+	vkUnmapMemory(m_LogicDevice, m_BufferMemory);
+}
+
+uint32_t Application::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags flags)
+{
+	VkPhysicalDeviceMemoryProperties properties;
+	vkGetPhysicalDeviceMemoryProperties(m_PhyiscalDevice, &properties);
+	for (size_t i = 0; i < properties.memoryTypeCount; i++)
+	{
+		if ((typeFilter &  (1 << i)) && (properties.memoryTypes[i].propertyFlags & flags) == flags)
+		{
+			return i;
+		}
+	}
+	throw std::runtime_error("failed to find suitable memory type!");
+}
+

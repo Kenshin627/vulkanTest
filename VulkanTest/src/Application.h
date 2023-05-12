@@ -6,6 +6,7 @@
 #include <GLFW/glfw3native.h>
 #include <optional>
 #include <vector>
+#include <glm.hpp>
 
 class Application
 {
@@ -39,6 +40,36 @@ private:
 			return !formats.empty() && !presentModes.empty();
 		}
 	};
+
+	struct Vertex
+	{
+		glm::vec2 pos;
+		glm::vec3 color;
+		static VkVertexInputBindingDescription GetBindingDescription()
+		{
+			VkVertexInputBindingDescription desc;
+			desc.binding = 0;
+			desc.stride = sizeof(Vertex);
+			desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			return desc;
+		}
+
+		static std::vector<VkVertexInputAttributeDescription> GetAttribuDescription()
+		{
+			std::vector<VkVertexInputAttributeDescription> attributes(2);
+			attributes[0].binding = 0;
+			attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
+			attributes[0].location = 0;
+			attributes[0].offset = offsetof(Vertex, pos);
+
+			attributes[1].binding = 0;
+			attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attributes[1].location = 1;
+			attributes[1].offset = offsetof(Vertex, color);
+			return attributes;
+		}
+	};
+
 private:
 	void CreateInstance();
 	void CreateSurface();
@@ -62,6 +93,8 @@ private:
 	void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 	void CreateSyncObjects();
 	void DrawFrame();
+	void CreateVertexBuffer();
+	uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags flags);
 
 private:
 	GLFWwindow* m_Window;
@@ -86,4 +119,11 @@ private:
 	VkSemaphore m_ImageAvailableSemaphore;
 	VkSemaphore m_RenderFinishedSemaphore;
 	VkFence m_InFlightFence;
+	VkBuffer m_VertexBuffer;
+	VkDeviceMemory m_BufferMemory;
+	std::vector<Vertex> m_Vertices = {
+	{{0.0f, -0.5f}, {0.8f, 0.6f, 0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 0.6f, 0.7f}},
+	{{-0.5f, 0.5f}, {0.8f, 0.0f, 1.0f}}
+	};
 };
