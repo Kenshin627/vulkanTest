@@ -80,25 +80,23 @@ void Application::InitVulkan()
 
 void Application::CreateInstance()
 {
-	VkApplicationInfo appInfo{};
-	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	vk::ApplicationInfo appInfo{};
+	appInfo.sType = vk::StructureType::eApplicationInfo;
 	appInfo.pApplicationName = "vulkanTest";
-
-	VkInstanceCreateInfo createInfo{};
-	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	createInfo.pApplicationInfo = &appInfo;
 
 	uint32_t glfwExtensionCount = 0;
 	const char** glfwExtensions;
-
 	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-	createInfo.enabledExtensionCount = glfwExtensionCount;
-	createInfo.ppEnabledExtensionNames = glfwExtensions;
 
-	//validation layers
-	createInfo.enabledLayerCount = 0;
-
-	if (vkCreateInstance(&createInfo, nullptr, &m_Vkinstance) != VK_SUCCESS)
+	vk::InstanceCreateInfo createInfo{};
+	createInfo.sType = vk::StructureType::eInstanceCreateInfo;
+	createInfo.setPApplicationInfo(&appInfo)
+		.setEnabledExtensionCount(glfwExtensionCount)
+		.setPpEnabledExtensionNames(glfwExtensions)
+		.setEnabledLayerCount(0);
+	
+	m_Vkinstance = vk::createInstance(createInfo);
+	if (!m_Vkinstance)
 	{
 		throw std::runtime_error("failed to create instance!");
 	}
@@ -107,16 +105,15 @@ void Application::CreateInstance()
 void Application::PickPhysicalDevice()
 {
 	uint32_t phisicalDeviceCount = 0;
-	vkEnumeratePhysicalDevices(m_Vkinstance, &phisicalDeviceCount, nullptr);
-	if (phisicalDeviceCount == 0)
+	auto devices = m_Vkinstance.enumeratePhysicalDevices();
+	
+	if (devices.size() == 0)
 	{
 		throw std::runtime_error("can not found device!");
 	}
 
-	std::vector<VkPhysicalDevice> phsicalDevices(phisicalDeviceCount);
-	vkEnumeratePhysicalDevices(m_Vkinstance, &phisicalDeviceCount, phsicalDevices.data());
 
-	for (auto& device : phsicalDevices)
+	for (auto& device : devices)
 	{
 		if (IsDeviceSuitable(device))
 		{
@@ -129,16 +126,13 @@ void Application::PickPhysicalDevice()
 	}
 }
 
-bool Application::IsDeviceSuitable(const VkPhysicalDevice& device)
+bool Application::IsDeviceSuitable(const vk::PhysicalDevice& device)
 {
-	//bool swapChainSupport = false;
 	bool isDeviceExtensionSupport = false;
 
-	VkPhysicalDeviceProperties properts{};
-	VkPhysicalDeviceFeatures features{};
-	vkGetPhysicalDeviceProperties(device, &properts);
-	vkGetPhysicalDeviceFeatures(device, &features);
-
+	vk::PhysicalDeviceProperties properts = device.getProperties();
+	vk::PhysicalDeviceFeatures features = device.getFeatures();
+	
 	QueueFamilyIndices indices = FindQueueFamilies(device);
 	
 	isDeviceExtensionSupport = IsDeviceExtensionSupport(device);
@@ -152,23 +146,21 @@ bool Application::IsDeviceSuitable(const VkPhysicalDevice& device)
 		    features.geometryShader;
 }
 
-Application::QueueFamilyIndices Application::FindQueueFamilies(const VkPhysicalDevice& device)
+Application::QueueFamilyIndices Application::FindQueueFamilies(const vk::PhysicalDevice& device)
 {
 	QueueFamilyIndices indices;
-	uint32_t queueCount = 0;	
-	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueCount, nullptr);
-	std::vector<VkQueueFamilyProperties> properties(queueCount);
-	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueCount, properties.data());
+	auto properties = device.getQueueFamilyProperties();
 	int i = 0;
 	
 	for (auto& property : properties)
 	{		
-		if (property.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+		if (property.queueFlags & vk::QueueFlagBits::eGraphics)
 		{
 			indices.GraphicFamily = i;
 		}
 		VkBool32 presentSupport = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_Surface, &presentSupport);
+		device.getSurfaceSupportKHR(i, m_Surface, &presentSupport);
+		
 		if (presentSupport)
 		{
 			indices.PresentFamily = i;
@@ -232,10 +224,11 @@ void Application::CreateSurface()
 	}
 }
 
-bool Application::IsDeviceExtensionSupport(const VkPhysicalDevice& device)
+bool Application::IsDeviceExtensionSupport(const vk::PhysicalDevice& device)
 {
 	uint32_t extensionCount = 0;
 	std::set<std::string> requiredExtensions(m_DeviceExtesions.begin(), m_DeviceExtesions.end());
+
 	vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 	std::vector<VkExtensionProperties> availableExtesions;
 	availableExtesions.resize(extensionCount);
