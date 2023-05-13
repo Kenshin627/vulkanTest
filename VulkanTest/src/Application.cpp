@@ -4,10 +4,14 @@
 #include <limits>
 #include <algorithm>
 #include <cstdint>
+#include <chrono>
+#include <glm.hpp>
+#include <gtc/matrix_transform.hpp>
 
 #include "Application.h"
 #include "../utils/readFile.h"
 
+static const uint32_t MAX_FRAME_IN_FLIGHT = 2;
 void Application::InitWindow()
 {
 	if (!glfwInit())
@@ -36,10 +40,12 @@ void Application::MainLoop()
 
 void Application::Cleanup()
 {
-	m_LogicDevice.destroySemaphore(m_ImageAvailableSemaphore);
-	m_LogicDevice.destroySemaphore(m_RenderFinishedSemaphore);
-
-	m_LogicDevice.destroyFence(m_InFlightFence);
+	for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
+	{
+		m_LogicDevice.destroySemaphore(m_ImageAvailableSemaphores[i]);
+		m_LogicDevice.destroySemaphore(m_RenderFinishedSemaphores[i]);
+		m_LogicDevice.destroyFence(m_InFlightFences[i]);
+	}
 	m_LogicDevice.destroyCommandPool(m_CommandPool);
 	
 	for (auto& fb : m_FrameBuffers)
@@ -55,6 +61,14 @@ void Application::Cleanup()
 		m_LogicDevice.destroyImageView(imageView);
 	}
 	m_LogicDevice.destroySwapchainKHR(m_SwapChain);
+
+	for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
+	{
+		m_LogicDevice.destroyBuffer(m_UniformBuffers[i]);
+		m_LogicDevice.freeMemory(m_UniformBufferMemory[i]);
+	}
+
+	m_LogicDevice.destroyDescriptorSetLayout(m_DescriptorSetLayout);
 	m_LogicDevice.destroyBuffer(m_IndexBuffer);
 	m_LogicDevice.freeMemory(m_IndexBufferMemory);
 	m_LogicDevice.destroyBuffer(m_VertexBuffer);
@@ -76,12 +90,16 @@ void Application::InitVulkan()
 	CreateSwapChain();
 	CreateImageViews();
 	CreateRenderPass();
+	createDescriptorSetLayout();
 	CreateGraphicsPipeline();
 	CreateFrameBuffer();
 	CreateCommandPool();
 	CreateVertexBuffer();
 	CreateIndexBuffer();
-	CreateCommandBuffer(m_CommandBuffer);
+	CreateUniformBuffers();
+	CreateDescriptorPool();
+	CreateDescriptorSets();
+	CreateCommandBuffer();
 	CreateSyncObjects();
 }
 
@@ -431,7 +449,7 @@ void Application::CreateGraphicsPipeline()
 			  .setPolygonMode(vk::PolygonMode::eFill)
 			  .setLineWidth(1.0f)
 			  .setCullMode(vk::CullModeFlagBits::eBack)
-			  .setFrontFace(vk::FrontFace::eClockwise)
+			  .setFrontFace(vk::FrontFace::eCounterClockwise)
 			  .setDepthBiasEnable(VK_FALSE);
 	#pragma endregion
 
@@ -471,7 +489,8 @@ void Application::CreateGraphicsPipeline()
 	#pragma region layout
 	vk::PipelineLayoutCreateInfo layoutInfo{};
 	layoutInfo.sType = vk::StructureType::ePipelineLayoutCreateInfo;
-	layoutInfo.setSetLayoutCount(0)
+	layoutInfo.setSetLayoutCount(1)
+			  .setPSetLayouts(&m_DescriptorSetLayout)
 		      .setPushConstantRangeCount(0);
 	if (m_LogicDevice.createPipelineLayout(&layoutInfo, nullptr, &m_PipelineLayout) != vk::Result::eSuccess)
 	{
@@ -605,16 +624,20 @@ void Application::CreateCommandPool()
 	}
 }
 
-void Application::CreateCommandBuffer(vk::CommandBuffer& buffer)
+void Application::CreateCommandBuffer()
 {
 	vk::CommandBufferAllocateInfo commandBufferAllocInfo{};
 	commandBufferAllocInfo.sType = vk::StructureType::eCommandBufferAllocateInfo;
 	commandBufferAllocInfo.setCommandPool(m_CommandPool)
 						  .setCommandBufferCount(1)
 						  .setLevel(vk::CommandBufferLevel::ePrimary);
-	if (m_LogicDevice.allocateCommandBuffers(&commandBufferAllocInfo, &buffer) != vk::Result::eSuccess)
+	m_CommandBuffers.resize(MAX_FRAME_IN_FLIGHT);
+	for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
 	{
-		throw std::runtime_error("failed to allocate command buffers!");
+		if (m_LogicDevice.allocateCommandBuffers(&commandBufferAllocInfo, &m_CommandBuffers[i]) != vk::Result::eSuccess)
+		{
+			throw std::runtime_error("failed to allocate command buffers!");
+		}
 	}
 }
 
@@ -662,6 +685,7 @@ void Application::RecordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t 
 			vk::DeviceSize offsets[] = { 0 };
 			commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 			commandBuffer.bindIndexBuffer(m_IndexBuffer, 0, vk::IndexType::eUint16);
+			commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_PipelineLayout, 0, 1, &m_DescriptorSets[m_CurrentFrame], 0, nullptr);
 			commandBuffer.drawIndexed(static_cast<uint32_t>(m_Indices.size()), 1, 0, 0, 0);
 			//commandBuffer.draw(m_Vertices.size(), 1, 0, 0);
 		
@@ -677,41 +701,48 @@ void Application::CreateSyncObjects()
 	vk::FenceCreateInfo fenceInfo{};
 	fenceInfo.sType = vk::StructureType::eFenceCreateInfo;
 	fenceInfo.setFlags(vk::FenceCreateFlagBits::eSignaled);
+
+	m_CommandBuffers.resize(MAX_FRAME_IN_FLIGHT);
+	m_ImageAvailableSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+	m_RenderFinishedSemaphores.resize(MAX_FRAME_IN_FLIGHT);
+	m_InFlightFences.resize(MAX_FRAME_IN_FLIGHT);
 		
-	
-	if (m_LogicDevice.createSemaphore(&semaphoreInfo, nullptr, &m_ImageAvailableSemaphore) != vk::Result::eSuccess ||
-		m_LogicDevice.createSemaphore(&semaphoreInfo, nullptr, &m_RenderFinishedSemaphore) != vk::Result::eSuccess ||
-		m_LogicDevice.createFence(&fenceInfo, nullptr, &m_InFlightFence)  != vk::Result::eSuccess
-		)
+	for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
 	{
-		throw std::runtime_error("failed to create semaphores!");
+		if (m_LogicDevice.createSemaphore(&semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != vk::Result::eSuccess ||
+			m_LogicDevice.createSemaphore(&semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != vk::Result::eSuccess ||
+			m_LogicDevice.createFence(&fenceInfo, nullptr, &m_InFlightFences[i]) != vk::Result::eSuccess
+			)
+		{
+			throw std::runtime_error("failed to create semaphores!");
+		}
 	}
 }
 
 void Application::DrawFrame()
 {
-	m_LogicDevice.waitForFences(1, &m_InFlightFence, VK_TRUE, UINT64_MAX);
-	m_LogicDevice.resetFences(1, &m_InFlightFence);
-
+	m_LogicDevice.waitForFences(1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 	uint32_t imageIndex;
-	m_LogicDevice.acquireNextImageKHR(m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
-	m_CommandBuffer.reset();
-	RecordCommandBuffer(m_CommandBuffer, imageIndex);
+	m_LogicDevice.acquireNextImageKHR(m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &imageIndex);
+	UploadUniformBuffer(m_CurrentFrame);
+	m_LogicDevice.resetFences(1, &m_InFlightFences[m_CurrentFrame]);
+	m_CommandBuffers[m_CurrentFrame].reset();
+	RecordCommandBuffer(m_CommandBuffers[m_CurrentFrame], imageIndex);
 
 	vk::SubmitInfo submitInfo{};
-	vk::Semaphore waitSemaphores[] = { m_ImageAvailableSemaphore };
-	vk::Semaphore signadSemaphores[] = { m_RenderFinishedSemaphore };
+	vk::Semaphore waitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame]};
+	vk::Semaphore signadSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame]};
 	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 	submitInfo.sType = vk::StructureType::eSubmitInfo;
 	submitInfo.setCommandBufferCount(1)
-			  .setPCommandBuffers(&m_CommandBuffer)
+			  .setPCommandBuffers(&m_CommandBuffers[m_CurrentFrame])
 			  .setWaitSemaphoreCount(1)
 			  .setPWaitSemaphores(waitSemaphores)
 			  .setSignalSemaphoreCount(1)
 			  .setPSignalSemaphores(signadSemaphores)
 			  .setPWaitDstStageMask(waitStages);
 	
-	if (m_GraphicQueue.submit(1, &submitInfo, m_InFlightFence) != vk::Result::eSuccess)
+	if (m_GraphicQueue.submit(1, &submitInfo, m_InFlightFences[m_CurrentFrame]) != vk::Result::eSuccess)
 	{
 		throw std::runtime_error("failed to submit draw command buffer!");
 	}	
@@ -730,6 +761,7 @@ void Application::DrawFrame()
 	{
 		throw std::runtime_error("failed to present Image!");
 	}
+	m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAME_IN_FLIGHT;
 }
 
 void Application::CreateVertexBuffer()
@@ -809,7 +841,18 @@ uint32_t Application::FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlag
 void Application::CopyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size)
 {
 	vk::CommandBuffer commandBuffer;
-	CreateCommandBuffer(commandBuffer);
+	
+	vk::CommandBufferAllocateInfo commandBufferAllocInfo{};
+	commandBufferAllocInfo.sType = vk::StructureType::eCommandBufferAllocateInfo;
+	commandBufferAllocInfo.setCommandPool(m_CommandPool)
+					      .setCommandBufferCount(1)
+					      .setLevel(vk::CommandBufferLevel::ePrimary);
+	
+	if (m_LogicDevice.allocateCommandBuffers(&commandBufferAllocInfo, &commandBuffer) != vk::Result::eSuccess)
+	{
+		throw std::runtime_error("failed to allocate command buffers!");
+	}
+
 
 	vk::CommandBufferBeginInfo commandBeginInfo{};
 	commandBeginInfo.sType = vk::StructureType::eCommandBufferBeginInfo;
@@ -836,3 +879,102 @@ void Application::CopyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::Dev
 	m_LogicDevice.freeCommandBuffers(m_CommandPool, 1, &commandBuffer);
 }
 
+void Application::createDescriptorSetLayout()
+{
+	vk::DescriptorSetLayoutBinding binding{};
+	binding.setBinding(0)
+		   .setDescriptorCount(1)
+		   .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+		   .setStageFlags(vk::ShaderStageFlagBits::eVertex)
+		   .setPImmutableSamplers(nullptr);
+
+	vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+	layoutInfo.sType = vk::StructureType::eDescriptorSetLayoutCreateInfo;
+	layoutInfo.setBindingCount(1)
+		      .setPBindings(&binding);
+
+	if (m_LogicDevice.createDescriptorSetLayout(&layoutInfo, nullptr, &m_DescriptorSetLayout) != vk::Result::eSuccess)
+	{
+		throw std::runtime_error("failed to create descriptor set layout!");
+	}
+}
+
+void Application::CreateUniformBuffers()
+{
+	vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+	m_UniformBuffers.resize(MAX_FRAME_IN_FLIGHT);
+	m_UniformBufferMemory.resize(MAX_FRAME_IN_FLIGHT);
+	m_UniformBufferMapped.resize(MAX_FRAME_IN_FLIGHT);
+
+	for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
+	{
+		CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, m_UniformBuffers[i], m_UniformBufferMemory[i]);
+		m_LogicDevice.mapMemory(m_UniformBufferMemory[i], 0, bufferSize, {}, &m_UniformBufferMapped[i]);
+	}
+}
+
+void Application::UploadUniformBuffer(uint32_t currentImage)
+{
+	static auto startTime = std::chrono::high_resolution_clock::now();
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+	UniformBufferObject ubo{};
+	ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.projection = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f);
+	ubo.projection[1][1] *= -1;
+	memcpy(m_UniformBufferMapped[currentImage], &ubo, sizeof(ubo));
+}
+
+void Application::CreateDescriptorPool()
+{
+	vk::DescriptorPoolSize poolSize{};
+	poolSize.setType(vk::DescriptorType::eUniformBuffer)
+			.setDescriptorCount(static_cast<uint32_t>(MAX_FRAME_IN_FLIGHT));
+	vk::DescriptorPoolCreateInfo poolInfo{};
+	poolInfo.sType = vk::StructureType::eDescriptorPoolCreateInfo;
+	poolInfo.setPoolSizeCount(1)
+			.setPPoolSizes(&poolSize)
+			.setMaxSets(static_cast<uint32_t>(MAX_FRAME_IN_FLIGHT));
+	if (m_LogicDevice.createDescriptorPool(&poolInfo, nullptr, &m_DescriptorPool) != vk::Result::eSuccess)
+	{
+		throw std::runtime_error("failed to create descriptor pool!");
+	}
+}
+
+void Application::CreateDescriptorSets()
+{
+	std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAME_IN_FLIGHT, m_DescriptorSetLayout);
+	vk::DescriptorSetAllocateInfo allocInfo{};
+	allocInfo.sType = vk::StructureType::eDescriptorSetAllocateInfo;
+	allocInfo.setDescriptorPool(m_DescriptorPool)
+			 .setDescriptorSetCount(MAX_FRAME_IN_FLIGHT)
+			 .setPSetLayouts(layouts.data());
+
+	m_DescriptorSets.resize(MAX_FRAME_IN_FLIGHT);
+	if (m_LogicDevice.allocateDescriptorSets(&allocInfo, m_DescriptorSets.data()) != vk::Result::eSuccess)
+	{
+		throw std::runtime_error("failed to allocate descriptor sets!");
+	}
+
+	for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
+	{
+		vk::DescriptorBufferInfo bufferInfo{};
+		bufferInfo.setBuffer(m_UniformBuffers[i])
+				  .setOffset(0)
+				  .setRange(sizeof(UniformBufferObject));
+
+		vk::WriteDescriptorSet descriptorWrite{};
+		descriptorWrite.sType = vk::StructureType::eWriteDescriptorSet;
+		descriptorWrite.setDstSet(m_DescriptorSets[i])
+					   .setDstBinding(0)
+					   .setDstArrayElement(0)
+					   .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+					   .setDescriptorCount(1)
+					   .setPBufferInfo(&bufferInfo)
+					   .setPImageInfo(nullptr)
+					   .setPTexelBufferView(nullptr);
+
+		m_LogicDevice.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+	}
+}

@@ -72,6 +72,13 @@ private:
 		}
 	};
 
+	struct UniformBufferObject
+	{
+		glm::mat4 model;
+		glm::mat4 view;
+		glm::mat4 projection;
+	};
+
 private:
 	void CreateInstance();
 	void CreateSurface();
@@ -91,15 +98,20 @@ private:
 	void CreateRenderPass();
 	void CreateFrameBuffer();
 	void CreateCommandPool();
-	void CreateCommandBuffer(vk::CommandBuffer& buffer);
+	void CreateCommandBuffer();
 	void RecordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 	void CreateSyncObjects();
 	void DrawFrame();
 	void CreateVertexBuffer();
 	void CreateIndexBuffer();
+	void CreateUniformBuffers();
 	void CreateBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
 	uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags flags);
 	void CopyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
+	void createDescriptorSetLayout();
+	void UploadUniformBuffer(uint32_t currentImage);
+	void CreateDescriptorPool();
+	void CreateDescriptorSets();
 
 private:
 	GLFWwindow* m_Window;
@@ -116,18 +128,23 @@ private:
 	std::vector<vk::ImageView> m_ImageViews;
 	std::vector<const char*> m_DeviceExtesions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	vk::RenderPass m_Renderpass;
+	vk::DescriptorSetLayout m_DescriptorSetLayout;
 	vk::PipelineLayout m_PipelineLayout;
 	vk::Pipeline m_Pipeline;
 	std::vector<vk::Framebuffer> m_FrameBuffers;
 	vk::CommandPool m_CommandPool;
-	vk::CommandBuffer m_CommandBuffer;
-	vk::Semaphore m_ImageAvailableSemaphore;
-	vk::Semaphore m_RenderFinishedSemaphore;
-	vk::Fence m_InFlightFence;
+	std::vector<vk::CommandBuffer> m_CommandBuffers;
+	std::vector<vk::Semaphore> m_ImageAvailableSemaphores;
+	std::vector<vk::Semaphore> m_RenderFinishedSemaphores;
+	std::vector<vk::Fence> m_InFlightFences;
 	vk::Buffer m_VertexBuffer;
 	vk::DeviceMemory m_VertexBufferMemory;
 	vk::Buffer m_IndexBuffer;
 	vk::DeviceMemory m_IndexBufferMemory;
+	std::vector<vk::Buffer> m_UniformBuffers;
+	std::vector<vk::DeviceMemory> m_UniformBufferMemory;
+	std::vector<void*> m_UniformBufferMapped;
+
 	std::vector<Vertex> m_Vertices = {
 		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
 		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
@@ -135,4 +152,7 @@ private:
 		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
 	};
 	std::vector<uint16_t> m_Indices = { 0, 1, 2, 2, 3, 0 };
+	uint32_t m_CurrentFrame = 0;
+	vk::DescriptorPool m_DescriptorPool;
+	std::vector<vk::DescriptorSet> m_DescriptorSets;
 };
