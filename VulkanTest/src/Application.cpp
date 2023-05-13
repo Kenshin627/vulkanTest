@@ -55,8 +55,10 @@ void Application::Cleanup()
 		m_LogicDevice.destroyImageView(imageView);
 	}
 	m_LogicDevice.destroySwapchainKHR(m_SwapChain);
+	m_LogicDevice.destroyBuffer(m_IndexBuffer);
+	m_LogicDevice.freeMemory(m_IndexBufferMemory);
 	m_LogicDevice.destroyBuffer(m_VertexBuffer);
-	m_LogicDevice.freeMemory(m_BufferMemory);
+	m_LogicDevice.freeMemory(m_VertexBufferMemory);	
 
 	m_LogicDevice.destroy();
 	m_Vkinstance.destroySurfaceKHR(m_Surface);
@@ -78,6 +80,7 @@ void Application::InitVulkan()
 	CreateFrameBuffer();
 	CreateCommandPool();
 	CreateVertexBuffer();
+	CreateIndexBuffer();
 	CreateCommandBuffer(m_CommandBuffer);
 	CreateSyncObjects();
 }
@@ -658,7 +661,9 @@ void Application::RecordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t 
 			vk::Buffer vertexBuffers[] = { m_VertexBuffer };
 			vk::DeviceSize offsets[] = { 0 };
 			commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
-			commandBuffer.draw(m_Vertices.size(), 1, 0, 0);
+			commandBuffer.bindIndexBuffer(m_IndexBuffer, 0, vk::IndexType::eUint16);
+			commandBuffer.drawIndexed(static_cast<uint32_t>(m_Indices.size()), 1, 0, 0, 0);
+			//commandBuffer.draw(m_Vertices.size(), 1, 0, 0);
 		
 		commandBuffer.endRenderPass();
 
@@ -738,11 +743,28 @@ void Application::CreateVertexBuffer()
 	memcpy(data, m_Vertices.data(), (size_t)bufferSize);
 	m_LogicDevice.unmapMemory(stagingBufferMemory);
 
-	CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VertexBuffer, m_BufferMemory);
+	CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VertexBuffer, m_VertexBufferMemory);
 	
 	CopyBuffer(stagingBuffer, m_VertexBuffer, bufferSize);
 	m_LogicDevice.destroyBuffer(stagingBuffer, nullptr);
 	m_LogicDevice.freeMemory(stagingBufferMemory, nullptr);
+}
+
+void Application::CreateIndexBuffer()
+{
+	VkDeviceSize bufferSize = sizeof(m_Indices[0]) * m_Indices.size();
+	vk::Buffer stagingBuffer;
+	vk::DeviceMemory stagingMemory;
+	CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingMemory);
+	void* data;
+	m_LogicDevice.mapMemory(stagingMemory, 0, bufferSize, {}, &data);
+	memcpy(data, m_Indices.data(), (size_t)bufferSize);
+	m_LogicDevice.unmapMemory(stagingMemory);
+
+	CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_IndexBuffer, m_IndexBufferMemory);
+	CopyBuffer(stagingBuffer, m_IndexBuffer, bufferSize);
+	m_LogicDevice.destroyBuffer(stagingBuffer, nullptr);
+	m_LogicDevice.freeMemory(stagingMemory, nullptr);
 }
 
 void Application::CreateBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)

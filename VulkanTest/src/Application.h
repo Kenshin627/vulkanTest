@@ -96,6 +96,7 @@ private:
 	void CreateSyncObjects();
 	void DrawFrame();
 	void CreateVertexBuffer();
+	void CreateIndexBuffer();
 	void CreateBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
 	uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags flags);
 	void CopyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
@@ -124,10 +125,14 @@ private:
 	vk::Semaphore m_RenderFinishedSemaphore;
 	vk::Fence m_InFlightFence;
 	vk::Buffer m_VertexBuffer;
-	vk::DeviceMemory m_BufferMemory;
+	vk::DeviceMemory m_VertexBufferMemory;
+	vk::Buffer m_IndexBuffer;
+	vk::DeviceMemory m_IndexBufferMemory;
 	std::vector<Vertex> m_Vertices = {
-		{{0.0f, -0.5f}, {0.8f, 0.6f, 0.0f}},
-		{{0.5f, 0.5f}, {0.0f, 0.6f, 0.7f}},
-		{{-0.5f, 0.5f}, {0.8f, 0.0f, 1.0f}}
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
 	};
+	std::vector<uint16_t> m_Indices = { 0, 1, 2, 2, 3, 0 };
 };
