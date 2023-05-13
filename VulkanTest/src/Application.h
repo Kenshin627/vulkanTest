@@ -1,5 +1,6 @@
+#pragma once
+
 #define VK_USE_PLATFORM_WIN32_KHR
-//#define GLFW_INCLUDE_VULKAN
 #include <vulkan/vulkan.hpp>
 #include <GLFW/glfw3.h>
 
@@ -50,8 +51,8 @@ private:
 		{
 			vk::VertexInputBindingDescription desc;
 			return desc.setBinding(0)
-				.setStride(sizeof(Vertex))
-				.setInputRate(vk::VertexInputRate::eVertex);
+					   .setStride(sizeof(Vertex))
+					   .setInputRate(vk::VertexInputRate::eVertex);
 		}
 
 		static std::vector<vk::VertexInputAttributeDescription> GetAttribuDescription()
@@ -63,9 +64,9 @@ private:
 						 .setOffset(offsetof(Vertex, pos));
 
 			attributes[1].setBinding(0)
-				.setFormat(vk::Format::eR32G32B32Sfloat)
-				.setLocation(1)
-				.setOffset(offsetof(Vertex, color));
+					     .setFormat(vk::Format::eR32G32B32Sfloat)
+					     .setLocation(1)
+					     .setOffset(offsetof(Vertex, color));
 
 			return attributes;
 		}
@@ -78,12 +79,12 @@ private:
 	bool IsDeviceSuitable(const vk::PhysicalDevice& device);
 	QueueFamilyIndices FindQueueFamilies(const vk::PhysicalDevice& device);
 	void CreateLogicDevice();
-	bool IsDeviceExtensionSupport(const VkPhysicalDevice& device);
-	SwapChainSupportDetail QuerySwapChainSupport(const VkPhysicalDevice& device);
+	bool IsDeviceExtensionSupport(const vk::PhysicalDevice& device);
+	SwapChainSupportDetail QuerySwapChainSupport(const vk::PhysicalDevice& device);
 	void CreateSwapChain();
-	vk::SurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats);
-	vk::PresentModeKHR ChooseSwapSurfacePresentMode(const std::vector<VkPresentModeKHR>& presentModes);
-	vk::Extent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+	vk::SurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& formats);
+	vk::PresentModeKHR ChooseSwapSurfacePresentMode(const std::vector<vk::PresentModeKHR>& presentModes);
+	vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 	void CreateImageViews();
 	void CreateGraphicsPipeline();
 	vk::ShaderModule CreateShaderModule(const std::vector<char>& sourceCode);
@@ -91,11 +92,11 @@ private:
 	void CreateFrameBuffer();
 	void CreateCommandPool();
 	void CreateCommandBuffer();
-	void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+	void RecordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 	void CreateSyncObjects();
 	void DrawFrame();
 	void CreateVertexBuffer();
-	uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags flags);
+	uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags flags);
 
 private:
 	GLFWwindow* m_Window;
@@ -123,8 +124,8 @@ private:
 	vk::Buffer m_VertexBuffer;
 	vk::DeviceMemory m_BufferMemory;
 	std::vector<Vertex> m_Vertices = {
-	{{0.0f, -0.5f}, {0.8f, 0.6f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 0.6f, 0.7f}},
-	{{-0.5f, 0.5f}, {0.8f, 0.0f, 1.0f}}
+		{{0.0f, -0.5f}, {0.8f, 0.6f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 0.6f, 0.7f}},
+		{{-0.5f, 0.5f}, {0.8f, 0.0f, 1.0f}}
 	};
 };
