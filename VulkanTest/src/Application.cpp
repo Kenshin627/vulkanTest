@@ -36,27 +36,31 @@ void Application::MainLoop()
 
 void Application::Cleanup()
 {
-	vkDestroySemaphore(m_LogicDevice, m_ImageAvailableSemaphore, nullptr);
-	vkDestroySemaphore(m_LogicDevice, m_RenderFinishedSemaphore, nullptr);
-	vkDestroyFence(m_LogicDevice, m_InFlightFence, nullptr);
-	vkDestroyCommandPool(m_LogicDevice, m_CommandPool, nullptr);
+	m_LogicDevice.destroySemaphore(m_ImageAvailableSemaphore);
+	m_LogicDevice.destroySemaphore(m_RenderFinishedSemaphore);
+
+	m_LogicDevice.destroyFence(m_InFlightFence);
+	m_LogicDevice.destroyCommandPool(m_CommandPool);
+	
 	for (auto& fb : m_FrameBuffers)
 	{
-		vkDestroyFramebuffer(m_LogicDevice, fb, nullptr);
+		m_LogicDevice.destroyFramebuffer(fb);
 	}
-	vkDestroyPipeline(m_LogicDevice, m_Pipeline, nullptr);
-	vkDestroyPipelineLayout(m_LogicDevice, m_PipelineLayout, nullptr);
-	vkDestroyRenderPass(m_LogicDevice, m_Renderpass, nullptr);
+	m_LogicDevice.destroyPipeline(m_Pipeline);
+	m_LogicDevice.destroyPipelineLayout(m_PipelineLayout);
+	m_LogicDevice.destroyRenderPass(m_Renderpass);
+
 	for (auto& imageView : m_ImageViews)
 	{
-		vkDestroyImageView(m_LogicDevice, imageView, nullptr);
+		m_LogicDevice.destroyImageView(imageView);
 	}
-	vkDestroySwapchainKHR(m_LogicDevice, m_SwapChain, nullptr);
-	vkDestroyBuffer(m_LogicDevice, m_VertexBuffer, nullptr);
-	vkFreeMemory(m_LogicDevice, m_BufferMemory, nullptr);
-	vkDestroyDevice(m_LogicDevice, nullptr);
-	vkDestroySurfaceKHR(m_Vkinstance, m_Surface, nullptr);
-	vkDestroyInstance(m_Vkinstance, nullptr);
+	m_LogicDevice.destroySwapchainKHR(m_SwapChain);
+	m_LogicDevice.destroyBuffer(m_VertexBuffer);
+	m_LogicDevice.freeMemory(m_BufferMemory);
+
+	m_LogicDevice.destroy();
+	m_Vkinstance.destroySurfaceKHR(m_Surface);
+	m_Vkinstance.destroy();
 	glfwDestroyWindow(m_Window);
 	glfwTerminate();
 }
