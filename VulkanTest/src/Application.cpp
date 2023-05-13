@@ -78,7 +78,7 @@ void Application::InitVulkan()
 	CreateFrameBuffer();
 	CreateCommandPool();
 	CreateVertexBuffer();
-	CreateCommandBuffer();
+	CreateCommandBuffer(m_CommandBuffer);
 	CreateSyncObjects();
 }
 
@@ -161,6 +161,7 @@ Application::QueueFamilyIndices Application::FindQueueFamilies(const vk::Physica
 		{
 			indices.GraphicFamily = i;
 		}
+
 		VkBool32 presentSupport = false;
 		device.getSurfaceSupportKHR(i, m_Surface, &presentSupport);
 		
@@ -601,14 +602,14 @@ void Application::CreateCommandPool()
 	}
 }
 
-void Application::CreateCommandBuffer()
+void Application::CreateCommandBuffer(vk::CommandBuffer& buffer)
 {
 	vk::CommandBufferAllocateInfo commandBufferAllocInfo{};
 	commandBufferAllocInfo.sType = vk::StructureType::eCommandBufferAllocateInfo;
 	commandBufferAllocInfo.setCommandPool(m_CommandPool)
 						  .setCommandBufferCount(1)
 						  .setLevel(vk::CommandBufferLevel::ePrimary);
-	if (m_LogicDevice.allocateCommandBuffers(&commandBufferAllocInfo, &m_CommandBuffer) != vk::Result::eSuccess)
+	if (m_LogicDevice.allocateCommandBuffers(&commandBufferAllocInfo, &buffer) != vk::Result::eSuccess)
 	{
 		throw std::runtime_error("failed to allocate command buffers!");
 	}
@@ -728,35 +729,45 @@ void Application::DrawFrame()
 
 void Application::CreateVertexBuffer()
 {
+	VkDeviceSize bufferSize = sizeof(m_Vertices[0]) * m_Vertices.size();
+	vk::Buffer stagingBuffer;
+	vk::DeviceMemory stagingBufferMemory;
+	CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+	void* data;
+	m_LogicDevice.mapMemory(stagingBufferMemory, 0, bufferSize, {}, &data);
+	memcpy(data, m_Vertices.data(), (size_t)bufferSize);
+	m_LogicDevice.unmapMemory(stagingBufferMemory);
+
+	CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VertexBuffer, m_BufferMemory);
+	
+	CopyBuffer(stagingBuffer, m_VertexBuffer, bufferSize);
+	m_LogicDevice.destroyBuffer(stagingBuffer, nullptr);
+	m_LogicDevice.freeMemory(stagingBufferMemory, nullptr);
+}
+
+void Application::CreateBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory)
+{
 	vk::BufferCreateInfo bufferInfo{};
 	bufferInfo.sType = vk::StructureType::eBufferCreateInfo;
-	bufferInfo.setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
-			  .setSize(sizeof(m_Vertices[0]) * m_Vertices.size())
+	bufferInfo.setUsage(usage)
+			  .setSize(size)
 			  .setSharingMode(vk::SharingMode::eExclusive);
-	
-	if (m_LogicDevice.createBuffer(&bufferInfo, nullptr, &m_VertexBuffer) != vk::Result::eSuccess)
+	if (m_LogicDevice.createBuffer(&bufferInfo, nullptr, &buffer) != vk::Result::eSuccess)
 	{
 		throw std::runtime_error("failed to create vertex buffer!");
 	}
-	vk::MemoryRequirements requirments;
-	m_LogicDevice.getBufferMemoryRequirements(m_VertexBuffer, &requirments);
+	vk::MemoryRequirements requirment;
+	m_LogicDevice.getBufferMemoryRequirements(buffer, &requirment);
 
-	vk::MemoryAllocateInfo maInfo{};
-	maInfo.sType = vk::StructureType::eMemoryAllocateInfo;
-	maInfo.setAllocationSize(requirments.size)
-		  .setMemoryTypeIndex(FindMemoryType(requirments.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent));
-
-	if (m_LogicDevice.allocateMemory(&maInfo, nullptr, &m_BufferMemory) != vk::Result::eSuccess)
+	vk::MemoryAllocateInfo allocateInfo{};
+	allocateInfo.sType = vk::StructureType::eMemoryAllocateInfo;
+	allocateInfo.setAllocationSize(requirment.size)
+			    .setMemoryTypeIndex(FindMemoryType(requirment.memoryTypeBits, properties));
+	if (m_LogicDevice.allocateMemory(&allocateInfo, nullptr, &bufferMemory) != vk::Result::eSuccess)
 	{
 		throw std::runtime_error("failed to allocate vertex buffer memory!");
 	}
-
-	m_LogicDevice.bindBufferMemory(m_VertexBuffer, m_BufferMemory, 0);
-
-	void* data;
-	m_LogicDevice.mapMemory(m_BufferMemory, 0, bufferInfo.size, {}, &data);
-	memcpy(data, m_Vertices.data(), (size_t)bufferInfo.size);
-	m_LogicDevice.unmapMemory(m_BufferMemory);
+	m_LogicDevice.bindBufferMemory(buffer, bufferMemory, 0);
 }
 
 uint32_t Application::FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags flags)
@@ -771,5 +782,35 @@ uint32_t Application::FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlag
 		}
 	}
 	throw std::runtime_error("failed to find suitable memory type!");
+}
+
+void Application::CopyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size)
+{
+	vk::CommandBuffer commandBuffer;
+	CreateCommandBuffer(commandBuffer);
+
+	vk::CommandBufferBeginInfo commandBeginInfo{};
+	commandBeginInfo.sType = vk::StructureType::eCommandBufferBeginInfo;
+	commandBeginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+	if (commandBuffer.begin(&commandBeginInfo) != vk::Result::eSuccess)
+	{
+		throw std::runtime_error("failed to begin command buffer!");
+	}
+		vk::BufferCopy copyRegion{};
+		copyRegion.setDstOffset(0)
+				  .setSrcOffset(0)
+				  .setSize(size);
+		commandBuffer.copyBuffer(srcBuffer, dstBuffer, copyRegion);
+	commandBuffer.end();
+
+	vk::SubmitInfo submitInfo{};
+	submitInfo.sType = vk::StructureType::eSubmitInfo;
+	submitInfo.setCommandBufferCount(1)
+			  .setPCommandBuffers(&commandBuffer);
+	m_GraphicQueue.submit(1, &submitInfo, VK_NULL_HANDLE);
+	m_GraphicQueue.waitIdle();
+
+	m_LogicDevice.freeCommandBuffers(m_CommandPool, 1, &commandBuffer);
 }
 

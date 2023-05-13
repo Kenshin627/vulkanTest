@@ -91,12 +91,14 @@ private:
 	void CreateRenderPass();
 	void CreateFrameBuffer();
 	void CreateCommandPool();
-	void CreateCommandBuffer();
+	void CreateCommandBuffer(vk::CommandBuffer& buffer);
 	void RecordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 	void CreateSyncObjects();
 	void DrawFrame();
 	void CreateVertexBuffer();
+	void CreateBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
 	uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags flags);
+	void CopyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 
 private:
 	GLFWwindow* m_Window;
