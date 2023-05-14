@@ -909,7 +909,10 @@ void Application::CreateUniformBuffers()
 	for (size_t i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
 	{
 		CreateBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, m_UniformBuffers[i], m_UniformBufferMemory[i]);
-		m_LogicDevice.mapMemory(m_UniformBufferMemory[i], 0, bufferSize, {}, &m_UniformBufferMapped[i]);
+		if (m_LogicDevice.mapMemory(m_UniformBufferMemory[i], 0, bufferSize, {}, &m_UniformBufferMapped[i]) != vk::Result::eSuccess)
+		{
+			throw std::runtime_error("failed to map uniformBuffer Memory!");
+		}
 	}
 }
 
