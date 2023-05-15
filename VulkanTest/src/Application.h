@@ -86,7 +86,9 @@ private:
 	};
 
 private:
+	void Init();
 	void CreateInstance();
+	bool CheckValidationLayerSupport();
 	void CreateSurface();
 	void PickPhysicalDevice();
 	bool IsDeviceSuitable(const vk::PhysicalDevice& device);

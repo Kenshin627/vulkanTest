@@ -13,6 +13,11 @@
 #include "../utils/readFile.h"
 
 static const uint32_t MAX_FRAME_IN_FLIGHT = 2;
+const std::vector<const char*> validationLayers =
+{
+	"VK_LAYER_KHRONOS_validation"
+};
+
 void Application::InitWindow()
 {
 	if (!glfwInit())
@@ -119,17 +124,47 @@ void Application::CreateInstance()
 	uint32_t glfwExtensionCount = 0;
 	const char** glfwExtensions;
 	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
+	std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+	
+	extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	vk::InstanceCreateInfo instanceInfo{};
 	instanceInfo.sType = vk::StructureType::eInstanceCreateInfo;
 	instanceInfo.setPApplicationInfo(&appInfo)
-			    .setEnabledExtensionCount(glfwExtensionCount)
-			    .setPpEnabledExtensionNames(glfwExtensions)
-			    .setEnabledLayerCount(0);
+			    .setEnabledExtensionCount(extensions.size())
+			    .setPpEnabledExtensionNames(extensions.data());
+
+	if (CheckValidationLayerSupport())
+	{
+		//default enalbe validationLayer
+		instanceInfo.setEnabledLayerCount(validationLayers.size())
+					.setPpEnabledLayerNames(validationLayers.data());
+	}
 	if (vk::createInstance(&instanceInfo, nullptr, &m_Vkinstance) != vk::Result::eSuccess)
 	{
 		throw std::runtime_error("failed to create instance!");
 	}
+}
+
+bool Application::CheckValidationLayerSupport()
+{
+	auto availableLayers = vk::enumerateInstanceLayerProperties();
+	for (auto& validationLayer : validationLayers)
+	{
+		bool layFound = false;
+		for (auto& layer : availableLayers)
+		{
+			if (strcmp(validationLayer, layer.layerName) == 0)
+			{
+				layFound = true;
+				break;
+			}
+		}
+		if (!layFound)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 void Application::PickPhysicalDevice()
