@@ -47,6 +47,7 @@ private:
 	{
 		glm::vec2 pos;
 		glm::vec3 color;
+		glm::vec2 coord;
 		static vk::VertexInputBindingDescription GetBindingDescription()
 		{
 			vk::VertexInputBindingDescription desc;
@@ -57,7 +58,7 @@ private:
 
 		static std::vector<vk::VertexInputAttributeDescription> GetAttribuDescription()
 		{
-			std::vector<vk::VertexInputAttributeDescription> attributes(2);
+			std::vector<vk::VertexInputAttributeDescription> attributes(3);
 			attributes[0].setBinding(0)
 						 .setFormat(vk::Format::eR32G32Sfloat)
 						 .setLocation(0)
@@ -67,6 +68,11 @@ private:
 					     .setFormat(vk::Format::eR32G32B32Sfloat)
 					     .setLocation(1)
 					     .setOffset(offsetof(Vertex, color));
+			
+			attributes[2].setBinding(0)
+						 .setFormat(vk::Format::eR32G32Sfloat)
+						 .setLocation(2)
+						 .setOffset(offsetof(Vertex, coord));
 
 			return attributes;
 		}
@@ -112,6 +118,14 @@ private:
 	void UploadUniformBuffer(uint32_t currentImage);
 	void CreateDescriptorPool();
 	void CreateDescriptorSets();
+	void CreateImage(uint32_t width, uint32_t height, vk::Format format);
+	void CreateImageTexture();
+	vk::CommandBuffer BeginOneTimeCommand();
+	void EndCommand(vk::CommandBuffer commandBuffer);
+	void TransiationImageLayout(const vk::Image& image, vk::AccessFlags distFlags, vk::AccessFlags srcFlags, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, vk::PipelineStageFlags srcStage, vk::PipelineStageFlags dstStage);
+	void CopyBufferToImage(vk::Buffer buffer, vk::Image image, vk::ImageLayout dstImagelayout, uint32_t width, uint32_t height);
+	void CreateImageView(vk::Image image, vk::ImageView& view, vk::Format format, vk::ImageViewType viewType);
+	void CreateSampler();
 
 private:
 	GLFWwindow* m_Window;
@@ -146,13 +160,18 @@ private:
 	std::vector<void*> m_UniformBufferMapped;
 
 	std::vector<Vertex> m_Vertices = {
-		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, { 0.0f, 1.0f }},
+		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, { 1.0f, 1.0f }},
+		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, { 1.0f, 0.0f }},
+		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f }}
 	};
 	std::vector<uint16_t> m_Indices = { 0, 1, 2, 2, 3, 0 };
 	uint32_t m_CurrentFrame = 0;
 	vk::DescriptorPool m_DescriptorPool;
 	std::vector<vk::DescriptorSet> m_DescriptorSets;
+
+	vk::Image m_Image;
+	vk::DeviceMemory  m_Memory;
+	vk::ImageView m_View;
+	vk::Sampler m_Sampler;
 };
